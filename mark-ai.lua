@@ -31,6 +31,7 @@ local config = {
     proximityDistance = 30,
     userCooldown = 15,
     globalCooldown = 3,
+    antispamEnabled = true,
     maxCompletionTokens = 512,
     maxHistoryPerPlayer = 20,
     historyFile = "MarkAI_History.json",
@@ -237,7 +238,15 @@ distBox:GetPropertyChangedSignal("Text"):Connect(function()
 end)
 
 -- ==== ANTISPAM ====
-label("🛡️ Antispam (segundos)")
+label("🛡️ Antispam")
+local antispamToggleRow = row()
+local antispamToggle = new("TextButton", {
+    Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Color3.fromRGB(40, 120, 60),
+    Text = "Antispam: ON", TextColor3 = Color3.new(1,1,1),
+    Font = Enum.Font.GothamBold, TextSize = 11, Parent = antispamToggleRow,
+})
+new("UICorner", { CornerRadius = UDim.new(0, 5) }, antispamToggle)
+
 local spamRow = row()
 local userCoolBox = new("TextBox", {
     Size = UDim2.new(0.5, -3, 1, 0),
@@ -630,7 +639,6 @@ local function initiateGreeting(target)
     setStatus("🚶 Acercándome a " .. target.Name .. " para saludar...")
     task.wait(1.5)
 
-    -- Empezar a mirar al objetivo mientras dura la espera
     startLookAt(target)
 
     local key = apiKeyBox.Text; if key == "" then return end
@@ -677,7 +685,7 @@ local function maybeGreetNearbyPlayer()
     local myRoot = char:FindFirstChild("HumanoidRootPart"); if not myRoot then return false end
     local now = os.clock()
 
-    -- FASE 1: esperando respuesta
+    -- Fase 1: esperando respuesta
     if state.greetTarget then
         local target = state.greetTarget
         if not target or not target.Parent or not target.Character then
@@ -699,7 +707,7 @@ local function maybeGreetNearbyPlayer()
         return true
     end
 
-    -- FASE 2: buscar nuevo jugador
+    -- Fase 2: buscar nuevo jugador
     for _, other in ipairs(Players:GetPlayers()) do
         if other ~= player and other.Character then
             local otherRoot = other.Character:FindFirstChild("HumanoidRootPart")
@@ -881,17 +889,19 @@ local function onChatMessage(message)
         if not triggerFound then return end
     end
 
-    -- Antispam
-    local now = os.clock()
-    if now - state.lastGlobalRequest < config.globalCooldown then
-        setStatus("🛡️ Antispam global."); return
+    -- Antispam (opcional)
+    if config.antispamEnabled then
+        local now = os.clock()
+        if now - state.lastGlobalRequest < config.globalCooldown then
+            setStatus("🛡️ Antispam global."); return
+        end
+        local lastUser = state.userCooldowns[src.UserId]
+        if lastUser and (now - lastUser) < config.userCooldown then
+            setStatus("🛡️ Antispam usuario: " .. src.Name); return
+        end
+        state.lastGlobalRequest = now
+        state.userCooldowns[src.UserId] = now
     end
-    local lastUser = state.userCooldowns[src.UserId]
-    if lastUser and (now - lastUser) < config.userCooldown then
-        setStatus("🛡️ Antispam usuario: " .. src.Name); return
-    end
-    state.lastGlobalRequest = now
-    state.userCooldowns[src.UserId] = now
 
     local clean = text
     if triggerFound then clean = stripTrigger(text) end
@@ -924,6 +934,13 @@ stopFollowBtn.MouseButton1Click:Connect(stopFollowing)
 for emoteName, btn in pairs(emoteBtns) do
     btn.MouseButton1Click:Connect(function() playEmote(emoteName) end)
 end
+
+antispamToggle.MouseButton1Click:Connect(function()
+    config.antispamEnabled = not config.antispamEnabled
+    antispamToggle.Text = config.antispamEnabled and "Antispam: ON" or "Antispam: OFF"
+    antispamToggle.BackgroundColor3 = config.antispamEnabled
+        and Color3.fromRGB(40, 120, 60) or Color3.fromRGB(80, 40, 40)
+end)
 
 autoBtn.MouseButton1Click:Connect(function()
     if state.autonomyActive then
